@@ -1,88 +1,9 @@
 # frozen_string_literal: true
+require 'i18n'
 
 module Kaminari
   module Helpers
-    module HelperMethods
-      # A helper that renders the pagination links.
-      #
-      #   <%= paginate @articles %>
-      #
-      # ==== Options
-      # * <tt>:window</tt> - The "inner window" size (4 by default).
-      # * <tt>:outer_window</tt> - The "outer window" size (0 by default).
-      # * <tt>:left</tt> - The "left outer window" size (0 by default).
-      # * <tt>:right</tt> - The "right outer window" size (0 by default).
-      # * <tt>:params</tt> - url_for parameters for the links (:controller, :action, etc.)
-      # * <tt>:param_name</tt> - parameter name for page number in the links (:page by default)
-      # * <tt>:remote</tt> - Ajax? (false by default)
-      # * <tt>:paginator_class</tt> - Specify a custom Paginator (Kaminari::Helpers::Paginator by default)
-      # * <tt>:template</tt> - Specify a custom template renderer for rendering the Paginator (receiver by default)
-      # * <tt>:ANY_OTHER_VALUES</tt> - Any other hash key & values would be directly passed into each tag as :locals value.
-      def paginate(scope, paginator_class: Kaminari::Helpers::Paginator, template: nil, **options)
-        options[:total_pages] ||= scope.total_pages
-        options.reverse_merge! current_page: scope.current_page, per_page: scope.limit_value, remote: false
-
-        paginator = paginator_class.new (template || self), options
-        paginator.to_s
-      end
-
-      # A simple "Twitter like" pagination link that creates a link to the previous page.
-      #
-      # ==== Examples
-      # Basic usage:
-      #
-      #   <%= link_to_previous_page @items, 'Previous Page' %>
-      #
-      # Ajax:
-      #
-      #   <%= link_to_previous_page @items, 'Previous Page', remote: true %>
-      #
-      # By default, it renders nothing if there are no more results on the previous page.
-      # You can customize this output by passing a block.
-      #
-      #   <%= link_to_previous_page @users, 'Previous Page' do %>
-      #     <span>At the Beginning</span>
-      #   <% end %>
-      def link_to_previous_page(scope, name, **options)
-        prev_page = path_to_prev_page(scope, options)
-
-        options.except! :params, :param_name
-        options[:rel] ||= 'prev'
-
-        link_to_if prev_page, name, prev_page, options do
-          yield if block_given?
-        end
-      end
-      alias link_to_prev_page link_to_previous_page
-
-      # A simple "Twitter like" pagination link that creates a link to the next page.
-      #
-      # ==== Examples
-      # Basic usage:
-      #
-      #   <%= link_to_next_page @items, 'Next Page' %>
-      #
-      # Ajax:
-      #
-      #   <%= link_to_next_page @items, 'Next Page', remote: true %>
-      #
-      # By default, it renders nothing if there are no more results on the next page.
-      # You can customize this output by passing a block.
-      #
-      #   <%= link_to_next_page @users, 'Next Page' do %>
-      #     <span>No More Pages</span>
-      #   <% end %>
-      def link_to_next_page(scope, name, **options)
-        next_page = path_to_next_page(scope, options)
-
-        options.except! :params, :param_name
-        options[:rel] ||= 'next'
-
-        link_to_if next_page, name, next_page, options do
-          yield if block_given?
-        end
-      end
-
+    module ViewHeler
       # Renders a helpful message with numbers of displayed vs. total entries.
       # Ported from mislav/will_paginate
       #
@@ -107,12 +28,37 @@ module Kaminari
                      end
 
         if collection.total_pages < 2
-          t('helpers.page_entries_info.one_page.display_entries', entry_name: entry_name, count: collection.total_count)
+          I18n.t('helpers.page_entries_info.one_page.display_entries', entry_name: entry_name, count: collection.total_count)
         else
-          t('helpers.page_entries_info.more_pages.display_entries', entry_name: entry_name, first: collection.offset_value + 1, last: [collection.offset_value + collection.limit_value, collection.total_count].min, total: collection.total_count)
+          I18n.t('helpers.page_entries_info.more_pages.display_entries', entry_name: entry_name, first: collection.offset_value + 1, last: [collection.offset_value + collection.limit_value, collection.total_count].min, total: collection.total_count)
         end.html_safe
       end
+    end
 
+    # The Kaminari::Helpers::UrlHelper module provides useful methods for generating
+    # a path to a particlar page. A class must implement the following interafces:
+    #
+    #   * <tt>url_for</tt>: A method that generates an actual path
+    #   * <tt>params</tt>: A method that returns query string parameters
+    #
+    # Additionally, depending on the implementation of the #url_for method, the class
+    # needs to implement the <tt>controller</tt> method that 
+    #
+    #  class PathHelperImpl
+    #   include Kaminari::Helpers::PathHelper
+    #   include Rails.application.routes.url_helpers # implements #url_for
+    #
+    #   def params
+    #     # ...
+    #   end
+    #
+    #   # Rails' url_helper requires this to be defined.
+    #   def controller
+    #     # ...
+    #   end
+    # end
+    #
+    module UrlHelper
       # Renders rel="next" and rel="prev" links to be used in the head.
       #
       # ==== Examples
@@ -136,8 +82,8 @@ module Kaminari
         prev_page = path_to_prev_page(scope, options)
 
         output = String.new
-        output << tag(:link, rel: "next", href: next_page) if next_page
-        output << tag(:link, rel: "prev", href: prev_page) if prev_page
+        output << %Q|<link rel="next" href="#{next_page}"></link>| if next_page
+        output << %Q|<link rel="prev" href="#{prev_page}"></link>| if prev_page
         output.html_safe
       end
 
@@ -167,5 +113,114 @@ module Kaminari
         Kaminari::Helpers::PrevPage.new(self, options.reverse_merge(current_page: scope.current_page)).url if scope.prev_page
       end
     end
+
+    module AnchorTagHelper
+      include UrlHelper
+
+      # A simple "Twitter like" pagination link that creates a link to the previous page.
+      #
+      # ==== Examples
+      # Basic usage:
+      #
+      #   <%= link_to_previous_page @items, 'Previous Page' %>
+      #
+      # Ajax:
+      #
+      #   <%= link_to_previous_page @items, 'Previous Page', remote: true %>
+      #
+      # By default, it renders nothing if there are no more results on the previous page.
+      # You can customize this output by passing a block.
+      #
+      #   <%= link_to_previous_page @users, 'Previous Page' do %>
+      #     <span>At the Beginning</span>
+      #   <% end %>
+      def link_to_previous_page(scope, name, **options)
+        prev_page = path_to_prev_page(scope, options)
+
+        options.except! :params, :param_name
+        options[:rel] ||= 'prev'
+
+        if prev_page
+          link_to name, prev_page, options
+        else
+          yield if block_given?
+        end
+      end
+      alias link_to_prev_page link_to_previous_page
+
+      # A simple "Twitter like" pagination link that creates a link to the next page.
+      #
+      # ==== Examples
+      # Basic usage:
+      #
+      #   <%= link_to_next_page @items, 'Next Page' %>
+      #
+      # Ajax:
+      #
+      #   <%= link_to_next_page @items, 'Next Page', remote: true %>
+      #
+      # By default, it renders nothing if there are no more results on the next page.
+      # You can customize this output by passing a block.
+      #
+      #   <%= link_to_next_page @users, 'Next Page' do %>
+      #     <span>No More Pages</span>
+      #   <% end %>
+      def link_to_next_page(scope, name, **options)
+        next_page = path_to_next_page(scope, options)
+
+        options.except! :params, :param_name
+        options[:rel] ||= 'next'
+
+        if next_page
+          link_to name, next_page, options
+        else
+          yield if block_given?
+        end
+      end
+    end
+
+    module PaginationHelper # :nodoc:
+      # A helper that renders the pagination links.
+      #
+      #   <%= paginate @articles %>
+      #
+      # ==== Options
+      # * <tt>:window</tt> - The "inner window" size (4 by default).
+      # * <tt>:outer_window</tt> - The "outer window" size (0 by default).
+      # * <tt>:left</tt> - The "left outer window" size (0 by default).
+      # * <tt>:right</tt> - The "right outer window" size (0 by default).
+      # * <tt>:params</tt> - url_for parameters for the links (:controller, :action, etc.)
+      # * <tt>:param_name</tt> - parameter name for page number in the links (:page by default)
+      # * <tt>:remote</tt> - Ajax? (false by default)
+      # * <tt>:paginator_class</tt> - Specify a custom Paginator (Kaminari::Helpers::Paginator by default)
+      # * <tt>:template</tt> - Specify a custom template renderer for rendering the Paginator (receiver by default)
+      # * <tt>:ANY_OTHER_VALUES</tt> - Any other hash key & values would be directly passed into each tag as :locals value.
+      def paginate(scope, paginator_class: Kaminari::Helpers::Paginator, template: nil, **options)
+        options[:total_pages] ||= scope.total_pages
+        options.reverse_merge! current_page: scope.current_page, per_page: scope.limit_value, remote: false
+
+        paginator = paginator_class.new (template || self), options
+        paginator.to_s
+      end
+    end
+
+    module HelperMethods #:nodoc:
+      include ViewHeler
+      include UrlHelper
+      include AnchorTagHelper
+      include PaginationHelper
+
+      def self.included(*)
+        super
+
+        warn "The Kaminari::Helpers::HelperMethods is deprecated. Please use Kaminari::Helpers module, which provides " \
+             "the exact same functionaliry."
+      end
+    end
+
+    include ViewHeler
+    include UrlHelper
+    include AnchorTagHelper
+    include PaginationHelper
   end
 end
